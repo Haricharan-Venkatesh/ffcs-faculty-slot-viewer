@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FFCS Faculty Slot Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg:        #0a0d14;
+    --surface:   #11151f;
+    --surface2:  #1a2035;
+    --border:    #252d42;
+    --accent:    #4f8ef7;
+    --accent2:   #7c5cbf;
+    --theory:    #3ecf8e;
+    --lab:       #f7894f;
+    --text:      #e2e8f4;
+    --muted:     #6b7a99;
+    --card-glow: rgba(79,142,247,0.08);
+    --danger:    #f76e6e;
+    --warn:      #f7c94f;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: .35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative; z-index: 10;
+    padding: 1.5rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(10,13,20,.98) 0%, transparent 100%);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+  }
+  .logo { display: flex; align-items: center; gap: .75rem; }
+  .logo-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: grid; place-items: center;
+    font-family: 'Space Mono', monospace;
+    font-size: .7rem; font-weight: 700; color: #fff;
+    letter-spacing: -.5px; line-height: 1.2;
+    text-align: center;
+  }
+  .logo-text h1 { font-size: 1.3rem; font-weight: 800; letter-spacing: -.5px; }
+  .logo-text p  { font-size: .72rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-top: 2px; }
+  #header-actions { display: none; align-items: center; gap: .75rem; flex-wrap: wrap; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: .6rem 1rem; border-radius: 10px;
+    font-family: 'Syne', sans-serif; font-size: .82rem; font-weight: 600;
+    cursor: pointer; transition: background .2s, border-color .2s, opacity .2s;
+    white-space: nowrap; display: inline-flex; align-items: center; gap: .4rem;
+  }
+  .btn:hover { background: var(--surface2); border-color: var(--accent); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-color: transparent; color: #fff;
+  }
+  .btn.primary:hover { opacity: .88; }
+  .btn.success {
+    background: linear-gradient(135deg, #2a7a56, #1e5e4a);
+    border-color: var(--theory); color: #fff;
+  }
+  .btn.success:hover { opacity: .88; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .upload-again {
+    font-size: .78rem; color: var(--muted); cursor: pointer; text-decoration: underline;
+    background: none; border: none; font-family: 'Syne'; transition: color .2s;
+  }
+  .upload-again:hover { color: var(--accent); }
+
+  /* ── UPLOAD ZONE ── */
+  #upload-section {
+    position: relative; z-index: 5;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100vh - 90px);
+    padding: 2rem;
+    animation: fadeUp .6s ease both;
+  }
+  .upload-card {
+    width: 100%; max-width: 520px;
+    background: var(--surface);
+    border: 2px dashed var(--border);
+    border-radius: 20px;
+    padding: 3rem 2.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .25s, background .25s, transform .2s;
+    position: relative; overflow: hidden;
+  }
+  .upload-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(79,142,247,.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .upload-card:hover, .upload-card.drag-over {
+    border-color: var(--accent);
+    background: var(--surface2);
+    transform: translateY(-2px);
+  }
+  .upload-icon {
+    width: 64px; height: 64px; margin: 0 auto 1.5rem;
+    background: linear-gradient(135deg, rgba(79,142,247,.15), rgba(124,92,191,.15));
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 1.8rem;
+  }
+  .upload-card h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: .5rem; }
+  .upload-card p  { color: var(--muted); font-size: .9rem; line-height: 1.6; }
+  .file-types { display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; margin-top: 1.5rem; }
+  .pill {
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: .25rem .75rem; border-radius: 999px;
+    font-size: .75rem; color: var(--muted); font-family: 'Space Mono', monospace;
+  }
+  #file-input { display: none; }
+
+  /* ── ERROR TOAST ── */
+  #error-toast {
+    display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+    background: #1e0f0f; border: 1px solid var(--danger); color: var(--danger);
+    padding: .85rem 1.5rem; border-radius: 12px; font-size: .85rem;
+    z-index: 1000; max-width: 90vw; text-align: center;
+    animation: fadeUp .3s ease;
+    box-shadow: 0 4px 24px rgba(247,110,110,.2);
+  }
+  #error-toast.warn { background: #1e1a0f; border-color: var(--warn); color: var(--warn); }
+
+  /* ── MAIN APP ── */
+  #app-section { display: none; position: relative; z-index: 5; padding: 1.5rem 2rem 3rem; }
+  #app-section.visible { display: block; animation: fadeUp .4s ease both; }
+
+  /* ── STATS BAR ── */
+  .stats-bar { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: .75rem 1.25rem;
+    display: flex; align-items: center; gap: .75rem;
+    flex: 1; min-width: 120px;
+  }
+  .stat-icon { font-size: 1.2rem; }
+  .stat-val  { font-size: 1.3rem; font-weight: 800; line-height: 1; }
+  .stat-lbl  { font-size: .68rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ── CONTROLS ── */
+  .controls {
+    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .search-wrap { flex: 1; min-width: 200px; position: relative; }
+  .search-wrap input {
+    width: 100%;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: .65rem 1rem .65rem 2.5rem;
+    color: var(--text); font-family: 'Syne', sans-serif; font-size: .88rem;
+    outline: none; transition: border-color .2s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap .search-icon {
+    position: absolute; left: .75rem; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: .9rem; pointer-events: none;
+  }
+  .search-hint { font-size: .72rem; color: var(--muted); padding: .3rem .5rem; }
+
+  /* ── SUBJECT TABS ── */
+  .subject-tabs {
+    display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .5rem; margin-bottom: 1.5rem;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .subject-tabs::-webkit-scrollbar { height: 4px; }
+  .subject-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .tab-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); padding: .55rem 1.1rem; border-radius: 8px;
+    font-family: 'Syne', sans-serif; font-size: .78rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap; transition: all .2s;
+    letter-spacing: .02em;
+  }
+  .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+  .tab-btn.active {
+    background: linear-gradient(135deg, rgba(79,142,247,.2), rgba(124,92,191,.2));
+    border-color: var(--accent); color: var(--accent);
+  }
+
+  /* ── MATRIX ── */
+  .matrix-header {
+    display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: .75rem;
+    margin-bottom: 1.25rem;
+  }
+  .subject-title { font-size: 1.15rem; font-weight: 800; }
+  .subject-meta  { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+  .slot-legend   { display: flex; gap: 1rem; font-size: .75rem; flex-wrap: wrap; }
+  .legend-dot    { display: flex; align-items: center; gap: .35rem; color: var(--muted); }
+  .dot           { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.theory    { background: var(--theory); }
+  .dot.lab       { background: var(--lab); }
+  .dot.other     { background: var(--muted); }
+
+  .matrix-scroll {
+    overflow-x: auto; border-radius: 14px;
+    border: 1px solid var(--border);
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  .matrix-scroll::-webkit-scrollbar { height: 6px; }
+  .matrix-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .slot-table {
+    border-collapse: collapse; width: max-content; min-width: 100%;
+    font-size: .82rem;
+  }
+  .slot-table thead tr { background: var(--surface2); }
+  .slot-table thead th {
+    padding: .65rem 1rem; text-align: center;
+    font-family: 'Space Mono', monospace; font-size: .73rem; font-weight: 700;
+    white-space: nowrap; border-right: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2;
+    background: var(--surface2);
+  }
+  .slot-table thead th:last-child { border-right: none; }
+  .th-theory { color: var(--theory); border-bottom: 2px solid var(--theory) !important; }
+  .th-lab    { color: var(--lab);    border-bottom: 2px solid var(--lab) !important; }
+  .th-other  { color: var(--muted);  border-bottom: 2px solid var(--muted) !important; }
+
+  .slot-table tbody tr:nth-child(even) { background: rgba(255,255,255,.02); }
+  .slot-table tbody tr:hover           { background: var(--card-glow); }
+  .slot-table tbody td {
+    padding: .5rem 1rem; text-align: center;
+    border-right: 1px solid var(--border);
+    border-top: 1px solid rgba(255,255,255,.04);
+    white-space: nowrap; color: var(--text);
+    font-size: .79rem;
+  }
+  .slot-table tbody td:last-child { border-right: none; }
+  .slot-table tbody td.empty { color: var(--surface2); user-select: none; }
+
+  .faculty-chip {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px; padding: .2rem .55rem;
+    font-size: .73rem; color: var(--text);
+    transition: background .15s, border-color .15s;
+    cursor: default;
+  }
+  .faculty-chip:hover {
+    background: rgba(79,142,247,.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .faculty-chip.highlight {
+    background: rgba(79,142,247,.25);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── OC / no-slot subjects ── */
+  .oc-grid { display: flex; flex-wrap: wrap; gap: .5rem; padding: 1rem 0; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align: center; padding: 3rem 1rem; color: var(--muted);
+  }
+  .empty-state .emoji { font-size: 2.5rem; margin-bottom: 1rem; }
+  .empty-state p { font-size: .9rem; }
+
+  /* ── PARSE LOG (collapsible) ── */
+  .parse-log-wrap { margin-bottom: 1rem; }
+  .parse-log-toggle {
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); font-family: 'Space Mono', monospace; font-size: .72rem;
+    padding: .35rem .75rem; border-radius: 6px; cursor: pointer; transition: all .2s;
+  }
+  .parse-log-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .parse-log {
+    display: none; margin-top: .5rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: .75rem 1rem;
+    font-family: 'Space Mono', monospace; font-size: .7rem; color: var(--muted);
+    line-height: 1.8; max-height: 200px; overflow-y: auto;
+  }
+  .parse-log.open { display: block; }
+  .log-ok   { color: var(--theory); }
+  .log-warn { color: var(--warn); }
+  .log-err  { color: var(--danger); }
+
+  /* ── SPINNER / ANIMATIONS ── */
+  .spinner {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    animation: spin .7s linear infinite; margin: 3rem auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── TOOLTIP ── */
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: .3rem .6rem; border-radius: 6px; font-size: .72rem; color: var(--text);
+    white-space: nowrap; pointer-events: none; z-index: 100;
+  }
+
+  /* ── QUICK GUIDE ── */
+  .quick-guide {
+    width: 100%; max-width: 520px;
+    margin-top: 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.35rem 1.75rem 1.5rem;
+    animation: fadeUp .7s .1s ease both;
+  }
+  .quick-guide-header {
+    display: flex; align-items: center; gap: .55rem;
+    margin-bottom: 1.1rem;
+  }
+  .quick-guide-header .guide-icon {
+    width: 26px; height: 26px;
+    background: linear-gradient(135deg, rgba(79,142,247,.18), rgba(124,92,191,.18));
+    border-radius: 7px;
+    display: grid; place-items: center;
+    font-size: .85rem; flex-shrink: 0;
+  }
+  .quick-guide-header span {
+    font-size: .82rem; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .guide-steps {
+    list-style: none;
+    display: flex; flex-direction: column; gap: .55rem;
+  }
+  .guide-steps li {
+    display: flex; align-items: flex-start; gap: .65rem;
+    font-size: .82rem; color: var(--muted); line-height: 1.55;
+  }
+  .guide-steps li .guide-bullet {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 700;
+  }
+  .guide-steps li strong { color: var(--text); font-weight: 600; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 640px) {
+    header { padding: 1rem 1rem; }
+    #app-section { padding: 1rem 1rem 2rem; }
+    .slot-table thead th,
+    .slot-table tbody td { padding: .42rem .6rem; font-size: .72rem; }
+    .faculty-chip { font-size: .68rem; padding: .15rem .4rem; }
+    .stat-card { min-width: 100px; padding: .6rem .9rem; }
+    .stat-val { font-size: 1.1rem; }
+    .controls { gap: .5rem; }
+    .search-wrap input { font-size: .82rem; }
+    .btn { font-size: .78rem; padding: .55rem .85rem; }
+  }
+  @media (max-width: 400px) {
+    .upload-card { padding: 2rem 1.25rem; }
+    .logo-text p { display: none; }
+  }
+
+  /* ── FOOTER ── */
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+  #upload-section,
+  #app-section {
+    flex: 1;
+  }
+  footer {
+    position: relative; z-index: 10;
+    border-top: 1px solid var(--border);
+    background: rgba(10,13,20,.85);
+    padding: .9rem 2rem;
+    text-align: center;
+    font-size: .75rem;
+    color: var(--muted);
+    letter-spacing: .02em;
+    flex-shrink: 0;
+  }
+  footer a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color .2s;
+  }
+  footer a:hover { color: var(--accent); }
+  footer .footer-sep {
+    display: inline-block;
+    margin: 0 .55rem;
+    opacity: .4;
+  }
+  @media (max-width: 400px) {
+    footer { padding: .75rem 1rem; font-size: .7rem; }
+  }
+</style>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     GOOGLE ANALYTICS 4
+     ─────────────────────────────────────────────────────────────────────
+     Replace G-XXXXXXXXXX below with your real GA4 Measurement ID.
+     Get it from: Google Analytics → Admin → Data Streams → your stream.
+     Works on GitHub Pages and any static host with no extra configuration.
+════════════════════════════════════════════════════════════════════════ -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-YJ0L93N774"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+
+  /* ↓↓↓  REPLACE G-XXXXXXXXXX WITH YOUR REAL MEASUREMENT ID  ↓↓↓ */
+  gtag('config', 'G-YJ0L93N774', {
+    /* Tracks: page_view, session_start, first_visit automatically.
+       Device type and traffic source are captured by GA4 by default.
+       send_page_view ensures a hit on initial load (works on SPAs too). */
+    send_page_view: true
+  });
+  /* ↑↑↑  REPLACE G-XXXXXXXXXX WITH YOUR REAL MEASUREMENT ID  ↑↑↑ */
+</script>
+
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">FF<br>CS</div>
+    <div class="logo-text">
+      <h1>FFCS Viewer</h1>
+      <p>VIT Faculty Slot Matrix</p>
+    </div>
+  </div>
+  <div id="header-actions">
+    <button class="btn success" id="download-btn" onclick="downloadWorkbook()" data-tip="Download organized Excel">⬇ Export Excel</button>
+    <button class="upload-again" onclick="resetUpload()">↑ Upload another file</button>
+  </div>
+</header>
+
+<!-- Upload section -->
+<section id="upload-section">
+  <div class="upload-card" id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <div class="upload-icon">📊</div>
+    <h2>Drop your FFCS Excel file</h2>
+    <p>Upload the faculty timetable file and instantly view slot matrices per subject</p>
+    <div class="file-types">
+      <span class="pill">.xlsx</span>
+      <span class="pill">.xls</span>
+    </div>
+  </div>
+  <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
+  <p style="margin-top:1.25rem; color:var(--muted); font-size:.78rem; text-align:center;">
+    File is processed entirely in your browser — nothing is uploaded to any server.
+  </p>
+
+  <div class="quick-guide">
+    <div class="quick-guide-header">
+      <div class="guide-icon">📋</div>
+      <span>Quick Guide</span>
+    </div>
+    <ul class="guide-steps">
+      <li><span class="guide-bullet">•</span><div>Create an <strong>Excel workbook</strong> (.xlsx)</div></li>
+      <li><span class="guide-bullet">•</span><div>Create <strong>one sheet per subject</strong> and name each sheet with the subject name</div></li>
+      <li><span class="guide-bullet">•</span><div>Copy the <strong>complete faculty table from VTOP</strong> and paste it into the corresponding sheet</div></li>
+      <li><span class="guide-bullet">•</span><div><strong>Repeat</strong> for all subjects</div></li>
+      <li><span class="guide-bullet">•</span><div><strong>Upload</strong> the Excel file above</div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- App section -->
+<section id="app-section">
+  <div id="loading" style="display:none;"><div class="spinner"></div></div>
+
+  <div id="main-content" style="display:none;">
+    <div class="stats-bar" id="stats-bar"></div>
+
+    <div class="controls">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input"
+               placeholder="Search faculty, slot, subject…"
+               oninput="handleSearch(this.value)">
+      </div>
+      <button class="btn" onclick="clearSearch()" id="clear-btn" style="display:none;">✕ Clear</button>
+    </div>
+
+    <div class="parse-log-wrap" id="parse-log-wrap" style="display:none;">
+      <button class="parse-log-toggle" onclick="toggleParseLog()">⚙ Parser log</button>
+      <div class="parse-log" id="parse-log"></div>
+    </div>
+
+    <div class="subject-tabs" id="subject-tabs"></div>
+    <div id="matrix-area"></div>
+  </div>
+</section>
+
+<div id="error-toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════════════ */
+let subjectsData  = [];  // Array<SubjectRecord>
+let activeSubject = 0;
+let searchQuery   = '';
+let parseLog      = [];  // Array<{level:'ok'|'warn'|'err', msg:string}>
+let _errorTimer   = null;
+
+/*
+  SubjectRecord = {
+    code:        string,          // e.g. "CSE1001" or sheet name fallback
+    displayName: string,          // human label for tab
+    full:        string,          // full title from row 0
+    slotFaculty: Map<string, Set<string>>,  // slot → faculty names
+    warnings:    string[],
+  }
+*/
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODULE: SLOT UTILS
+   All slot logic is regex-based — no hardcoded lists.
+═══════════════════════════════════════════════════════════════════════════ */
+const SlotUtils = (() => {
+  // Theory: one or two uppercase letters + digit(s), NOT starting with L
+  // Covers A1, A2, B1, TA1, TA2, etc.
+  const THEORY_RE = /^[A-HJ-Z][A-Z]?\d+$/;
+  // Lab: L followed by digits (possibly with + separator)
+  const LAB_RE    = /^L\d+(\+L\d+)*$/;
+  // Raw slot token patterns
+  const TOKEN_THEORY = /\b([A-HJ-Z][A-Z]?\d+)\b/g;
+  const TOKEN_LAB    = /L(\d+)/g;
+  // Nil-like values to skip
+  const NIL_RE = /^(nil|nan|n\/a|none|-|–|—|null|undefined|free)$/i;
+
+  function isTheory(s) { return THEORY_RE.test(s); }
+  function isLab(s)    { return LAB_RE.test(s); }
+  function isOther(s)  { return !isTheory(s) && !isLab(s); }
+
+  /** Sort key for theory slots — alphabetically + numerically */
+  function theorySortKey(s) {
+    const m = s.match(/^([A-Z]+)(\d+)$/);
+    if (!m) return 9999;
+    return m[1].charCodeAt(0) * 100 + parseInt(m[2]);
+  }
+
+  /** Sort key for lab slots */
+  function labSortKey(s) {
+    const m = s.match(/L(\d+)/);
+    return m ? parseInt(m[1]) : 9999;
+  }
+
+  /**
+   * Parse a raw cell value into an array of canonical slot strings.
+   * Handles:
+   *   - "A1+A2"  → ["A1", "A2"]  (split theory components)
+   *   - "L31+L32" → ["L31+L32"]  (keep lab pair together)
+   *   - "A1/A2"  → ["A1", "A2"]
+   *   - combined cells like "A1+A2+L31+L32"
+   *   - "NIL" / empty → []
+   */
+  function normalise(raw) {
+    if (!raw) return [];
+    const s = String(raw).trim();
+    if (!s || NIL_RE.test(s)) return [];
+
+    const labNums = [...s.matchAll(TOKEN_LAB)].map(m => parseInt(m[1])).sort((a,b)=>a-b);
+    const theoryTokens = [...s.matchAll(TOKEN_THEORY)]
+      .map(m => m[1])
+      .filter(t => !t.startsWith('L'));
+
+    const results = [];
+
+    // Group consecutive lab numbers into pairs (L31+L32, L33+L34, …)
+    for (let i = 0; i < labNums.length; ) {
+      if (i+1 < labNums.length && labNums[i+1] === labNums[i]+1) {
+        results.push(`L${labNums[i]}+L${labNums[i+1]}`);
+        i += 2;
+      } else {
+        results.push(`L${labNums[i]}`);
+        i++;
+      }
+    }
+
+    // Theory tokens are individual slots
+    for (const t of [...new Set(theoryTokens)]) {
+      results.push(t);
+    }
+
+    return results;
+  }
+
+  /** Sort an array of slot strings: theory first, then lab, then other */
+  function sortSlots(slots) {
+    const theory = slots.filter(isTheory).sort((a,b) => theorySortKey(a) - theorySortKey(b));
+    const lab    = slots.filter(isLab).sort((a,b) => labSortKey(a) - labSortKey(b));
+    const other  = slots.filter(isOther).sort();
+    return [...theory, ...lab, ...other];
+  }
+
+  return { isTheory, isLab, isOther, normalise, sortSlots, theorySortKey, labSortKey };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODULE: FILE PARSER
+   Dynamically detects structure — no hardcoded column positions.
+═══════════════════════════════════════════════════════════════════════════ */
+const FileParser = (() => {
+  // Keywords used to find the Slot column header
+  const SLOT_KEYWORDS  = ['slot detail', 'slot', 'slots', 'time slot', 'course slot'];
+  // Keywords used to find the Faculty column header
+  const FACULTY_KEYWORDS = ['faculty', 'faculty name', 'name of faculty', 'instructor', 'teacher', 'professor', 'emp name'];
+  // Keywords to identify "subject code" columns
+  const CODE_KEYWORDS  = ['course code', 'subject code', 'code', 'course no'];
+  // Keywords to identify subject-name in row 0
+  const HEADER_NIL_RE  = /^(sheet\d*|undefined|null|nan|true|false|\d+)$/i;
+
+  function cellStr(v) { return v == null ? '' : String(v).trim(); }
+
+  /** Find best column index for a set of keywords in a header row array */
+  function findCol(headerRow, keywords) {
+    const lower = headerRow.map(c => cellStr(c).toLowerCase());
+    for (const kw of keywords) {
+      const idx = lower.findIndex(h => h === kw);
+      if (idx >= 0) return idx;
+    }
+    // Partial match fallback
+    for (const kw of keywords) {
+      const idx = lower.findIndex(h => h.includes(kw));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  }
+
+  /**
+   * Detect the header row index (0-based).
+   * Heuristic: look for the row that contains the most keyword matches.
+   * Tries rows 0–5.
+   */
+  function detectHeaderRow(rows) {
+    const allKeywords = [...SLOT_KEYWORDS, ...FACULTY_KEYWORDS, ...CODE_KEYWORDS];
+    let bestRow = 1, bestScore = 0;
+    for (let ri = 0; ri <= Math.min(5, rows.length - 1); ri++) {
+      const lower = (rows[ri] || []).map(c => cellStr(c).toLowerCase());
+      let score = 0;
+      for (const kw of allKeywords) {
+        if (lower.some(h => h.includes(kw))) score++;
+      }
+      if (score > bestScore) { bestScore = score; bestRow = ri; }
+    }
+    return bestRow;
+  }
+
+  /**
+   * Detect all "slot group starts" — columns that look like slot headers.
+   * Some FFCS files repeat "Slot Detail | … | Faculty" blocks.
+   */
+  function detectSlotGroups(headerRow) {
+    const groups = [];
+    headerRow.forEach((cell, ci) => {
+      const v = cellStr(cell).toLowerCase();
+      if (SLOT_KEYWORDS.some(kw => v === kw || v.includes(kw))) {
+        groups.push(ci);
+      }
+    });
+    return groups.length ? groups : null;
+  }
+
+  /**
+   * For a given header row and a slot-column index,
+   * detect the nearest faculty column to its right (within ~5 columns).
+   */
+  function detectFacultyColNear(headerRow, slotCol) {
+    // First try: find explicit faculty header within next 5 cols
+    for (let ci = slotCol + 1; ci <= Math.min(slotCol + 5, headerRow.length - 1); ci++) {
+      const v = cellStr(headerRow[ci]).toLowerCase();
+      if (FACULTY_KEYWORDS.some(kw => v.includes(kw))) return ci;
+    }
+    // Fallback: slot+2 (common FFCS layout: slot | course | faculty)
+    if (slotCol + 2 < headerRow.length) return slotCol + 2;
+    if (slotCol + 1 < headerRow.length) return slotCol + 1;
+    return -1;
+  }
+
+  /**
+   * Extract subject code and display name from a sheet.
+   * Priority:
+   *   1. Row 0 + code from dedicated code column
+   *   2. Row 0 full text (strip code if embedded)
+   *   3. Sheet name
+   */
+  function extractSubjectMeta(rows, sheetName, headerRowIdx) {
+    // Try extracting from first non-empty row 0 cell
+    let fullName = '';
+    let code     = '';
+
+    const row0 = rows[0] || [];
+    for (const cell of row0) {
+      const v = cellStr(cell);
+      if (v && !HEADER_NIL_RE.test(v)) { fullName = v; break; }
+    }
+
+    // Try to extract code from header-adjacent rows
+    const headerRow = rows[headerRowIdx] || [];
+    const codeCol   = findCol(headerRow, CODE_KEYWORDS);
+    if (codeCol >= 0) {
+      for (let ri = headerRowIdx + 1; ri < Math.min(headerRowIdx + 5, rows.length); ri++) {
+        const v = cellStr(rows[ri]?.[codeCol]);
+        if (v && /[A-Z]{2,}\d{3,}/.test(v)) { code = v; break; }
+      }
+    }
+
+    // If still no code, try to extract from fullName like "CSE1001 - Data Structures"
+    if (!code && fullName) {
+      const m = fullName.match(/^([A-Z]{2,}\d{3,}[A-Z]?)\b/);
+      if (m) { code = m[1]; fullName = fullName.replace(m[1], '').replace(/^[\s\-–—:]+/, '').trim(); }
+    }
+
+    if (!fullName || HEADER_NIL_RE.test(fullName)) fullName = sheetName;
+    if (!code) code = sheetName;
+
+    // Display label for tab: code + abbreviated name
+    const displayName = code !== sheetName
+      ? `${code} · ${abbreviate(fullName, 18)}`
+      : abbreviate(sheetName, 22);
+
+    return { code, displayName, full: fullName || sheetName };
+  }
+
+  function abbreviate(s, maxLen) {
+    if (!s || s.length <= maxLen) return s || '';
+    return s.slice(0, maxLen - 1).trimEnd() + '…';
+  }
+
+  /**
+   * Parse one worksheet into a SubjectRecord.
+   * Returns null if the sheet has no useful data.
+   */
+  function parseSheet(ws, sheetName) {
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    const warnings = [];
+
+    if (!rows.length || rows.every(r => !r || r.every(c => !c))) {
+      return { _skip: true, reason: `Sheet "${sheetName}" is empty.` };
+    }
+
+    const headerRowIdx = detectHeaderRow(rows);
+    const headerRow    = rows[headerRowIdx] || [];
+
+    // Detect slot group starts
+    let slotGroups = detectSlotGroups(headerRow);
+
+    // Fallback: scan entire sheet for any row that has slot-like values
+    // and try to infer column layout from that
+    if (!slotGroups) {
+      warnings.push(`No explicit slot header found in "${sheetName}" — attempting heuristic detection.`);
+      // Try to find any cell that looks like a slot value in the data rows
+      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+        const row = rows[ri] || [];
+        for (let ci = 0; ci < row.length; ci++) {
+          const v = cellStr(row[ci]);
+          if (SlotUtils.normalise(v).length > 0) {
+            slotGroups = [ci];
+            warnings.push(`Heuristic: using column ${ci} as slot column.`);
+            break;
+          }
+        }
+        if (slotGroups) break;
+      }
+    }
+
+    if (!slotGroups) {
+      return { _skip: true, reason: `Sheet "${sheetName}" has no recognisable slot data.` };
+    }
+
+    // For each slot group, figure out the faculty column
+    const groups = slotGroups.map(sc => ({
+      slotCol:    sc,
+      facultyCol: detectFacultyColNear(headerRow, sc),
+    }));
+
+    // Build slot → Set<faculty>
+    const slotFaculty = new Map();
+    let recordCount = 0;
+
+    for (const { slotCol, facultyCol } of groups) {
+      if (facultyCol < 0) {
+        warnings.push(`Could not find faculty column near slot column ${slotCol}.`);
+        continue;
+      }
+
+      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+        const row      = rows[ri] || [];
+        const slotRaw  = row[slotCol];
+        const facRaw   = row[facultyCol];
+
+        if (!slotRaw) continue;
+
+        const faculty = cellStr(facRaw);
+        // Skip header-like repeated rows and empty/invalid faculty
+        if (!faculty || /^(faculty|name|instructor|teacher|professor|-|–)$/i.test(faculty)) continue;
+
+        const slots = SlotUtils.normalise(String(slotRaw));
+        if (!slots.length) continue;
+
+        recordCount++;
+        for (const s of slots) {
+          if (!slotFaculty.has(s)) slotFaculty.set(s, new Set());
+          slotFaculty.get(s).add(faculty);
+        }
+      }
+    }
+
+    if (slotFaculty.size === 0) {
+      return { _skip: true, reason: `Sheet "${sheetName}" yielded no slot-faculty records.` };
+    }
+
+    const meta = extractSubjectMeta(rows, sheetName, headerRowIdx);
+
+    return {
+      code:        meta.code,
+      displayName: meta.displayName,
+      full:        meta.full,
+      slotFaculty,
+      warnings,
+      recordCount,
+    };
+  }
+
+  /** Parse entire workbook, return array of SubjectRecords */
+  function parseWorkbook(wb) {
+    const subjects = [];
+    const log      = [];
+
+    if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+      throw new Error('Workbook has no sheets.');
+    }
+
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      if (!ws) { log.push({ level:'warn', msg:`Sheet "${sheetName}" is missing/null — skipped.` }); continue; }
+
+      let result;
+      try {
+        result = parseSheet(ws, sheetName);
+      } catch (e) {
+        log.push({ level:'err', msg:`Sheet "${sheetName}" parse error: ${e.message}` });
+        continue;
+      }
+
+      if (result._skip) {
+        log.push({ level:'warn', msg: result.reason });
+        continue;
+      }
+
+      for (const w of result.warnings) log.push({ level:'warn', msg: w });
+      log.push({ level:'ok', msg:`✓ "${sheetName}" → ${result.code}: ${result.slotFaculty.size} slots, ${result.recordCount} records.` });
+      subjects.push(result);
+    }
+
+    return { subjects, log };
+  }
+
+  return { parseWorkbook };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODULE: EXCEL EXPORTER
+   Generates a downloadable workbook — one sheet per subject.
+═══════════════════════════════════════════════════════════════════════════ */
+const ExcelExporter = (() => {
+  function buildWorkbook(subjectsData) {
+    const wb = XLSX.utils.book_new();
+
+    for (const subject of subjectsData) {
+      const slots = SlotUtils.sortSlots([...subject.slotFaculty.keys()]);
+      if (!slots.length) continue;
+
+      // Header row = slot names
+      const headerRow = slots;
+      // Data rows: zip faculty lists column-by-column
+      const maxRows = Math.max(...slots.map(s => subject.slotFaculty.get(s)?.size || 0));
+      const dataRows = [];
+      for (let r = 0; r < maxRows; r++) {
+        const row = slots.map(s => {
+          const facs = [...(subject.slotFaculty.get(s) || [])].sort();
+          return facs[r] || '';
+        });
+        dataRows.push(row);
+      }
+
+      const wsData = [headerRow, ...dataRows];
+      const ws     = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Style header row bold-ish (best-effort with SheetJS free)
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      ws['!cols'] = slots.map(() => ({ wch: 22 }));
+
+      // Safe sheet name (max 31 chars, no special chars)
+      const safeName = subject.code.replace(/[:\\/?*\[\]]/g, '-').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, safeName);
+    }
+
+    return wb;
+  }
+
+  function download(subjectsData, filename) {
+    if (!subjectsData.length) { showError('No data to export.'); return; }
+    const wb  = buildWorkbook(subjectsData);
+    XLSX.writeFile(wb, filename || 'ffcs_organized.xlsx');
+  }
+
+  return { download };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODULE: UI RENDERER
+═══════════════════════════════════════════════════════════════════════════ */
+const Renderer = (() => {
+  function renderStats(subjects) {
+    const allFaculty    = new Set();
+    const theorySlotSet = new Set();
+    const labSlotSet    = new Set();
+    let totalRecords    = 0;
+
+    subjects.forEach(s => {
+      s.slotFaculty.forEach((facs, slot) => {
+        facs.forEach(f => allFaculty.add(f));
+        if (SlotUtils.isTheory(slot)) theorySlotSet.add(slot);
+        if (SlotUtils.isLab(slot))    labSlotSet.add(slot);
+        totalRecords += facs.size;
+      });
+    });
+
+    document.getElementById('stats-bar').innerHTML = `
+      <div class="stat-card"><span class="stat-icon">📚</span>
+        <div><div class="stat-val">${subjects.length}</div><div class="stat-lbl">Subjects</div></div></div>
+      <div class="stat-card"><span class="stat-icon">👩‍🏫</span>
+        <div><div class="stat-val">${allFaculty.size}</div><div class="stat-lbl">Unique Faculty</div></div></div>
+      <div class="stat-card"><span class="stat-icon">📖</span>
+        <div><div class="stat-val">${theorySlotSet.size}</div><div class="stat-lbl">Theory Slots</div></div></div>
+      <div class="stat-card"><span class="stat-icon">🔬</span>
+        <div><div class="stat-val">${labSlotSet.size}</div><div class="stat-lbl">Lab Slots</div></div></div>
+      <div class="stat-card"><span class="stat-icon">📋</span>
+        <div><div class="stat-val">${totalRecords}</div><div class="stat-lbl">Records</div></div></div>
+    `;
+  }
+
+  function renderTabs(subjects, active) {
+    const container = document.getElementById('subject-tabs');
+    container.innerHTML = subjects.map((s, i) => `
+      <button class="tab-btn ${i===active?'active':''}" onclick="switchTab(${i})">
+        ${escHtml(s.displayName)}
+      </button>
+    `).join('');
+  }
+
+  function renderMatrix(subject, query) {
+    const sf    = subject.slotFaculty;
+    const area  = document.getElementById('matrix-area');
+    const slots = SlotUtils.sortSlots([...sf.keys()]);
+
+    const theorySlots = slots.filter(SlotUtils.isTheory);
+    const labSlots    = slots.filter(SlotUtils.isLab);
+    const otherSlots  = slots.filter(SlotUtils.isOther);
+
+    const subjectFacultySet = new Set();
+    sf.forEach(facs => facs.forEach(f => subjectFacultySet.add(f)));
+
+    let html = `
+      <div class="matrix-header">
+        <div>
+          <div class="subject-title">${escHtml(subject.full)}</div>
+          <div class="subject-meta">
+            ${escHtml(subject.code)}
+            &nbsp;·&nbsp; ${subjectFacultySet.size} faculty
+            &nbsp;·&nbsp; ${slots.length} slot${slots.length!==1?'s':''}
+            ${subject.warnings?.length ? `&nbsp;·&nbsp; <span style="color:var(--warn)">⚠ ${subject.warnings.length} warning${subject.warnings.length>1?'s':''}</span>` : ''}
+          </div>
+        </div>
+        <div class="slot-legend">
+          ${theorySlots.length ? `<div class="legend-dot"><div class="dot theory"></div>Theory (${theorySlots.length})</div>` : ''}
+          ${labSlots.length    ? `<div class="legend-dot"><div class="dot lab"></div>Lab (${labSlots.length})</div>` : ''}
+          ${otherSlots.length  ? `<div class="legend-dot"><div class="dot other"></div>Other (${otherSlots.length})</div>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Check for no-slot subjects (OC, open electives, etc.)
+    if (!slots.length) {
+      const allFacs = [...subjectFacultySet].sort();
+      const filtered = query ? allFacs.filter(f => matchesQuery(f, query, subject)) : allFacs;
+      if (!filtered.length) {
+        html += noResults(query);
+      } else {
+        html += `<div class="oc-grid">${filtered.map(f => chip(f, query)).join('')}</div>`;
+      }
+      area.innerHTML = html;
+      return;
+    }
+
+    // Filter slots if query matches slot name
+    let displaySlots = slots;
+    if (query) {
+      const q = query.toLowerCase();
+      // Show all slots but highlight faculty matches; also highlight matching slot headers
+      // (slots don't get hidden — just highlighted names within them)
+    }
+
+    const maxRows = Math.max(...displaySlots.map(s => sf.get(s)?.size || 0));
+
+    html += `<div class="matrix-scroll"><table class="slot-table"><thead><tr>`;
+    for (const slot of displaySlots) {
+      const cls = SlotUtils.isTheory(slot) ? 'th-theory' : SlotUtils.isLab(slot) ? 'th-lab' : 'th-other';
+      const slotHl = query && slot.toLowerCase().includes(query.toLowerCase()) ? ' style="background:rgba(79,142,247,.18)"' : '';
+      html += `<th class="${cls}"${slotHl}>${escHtml(slot.replace(/\+/g,' + '))}</th>`;
+    }
+    html += `</tr></thead><tbody>`;
+
+    for (let row = 0; row < maxRows; row++) {
+      // Check if this row has any visible content (for search filtering)
+      let anyMatch = !query;
+      if (query) {
+        for (const slot of displaySlots) {
+          const facs = [...(sf.get(slot) || [])].sort();
+          if (facs[row] && matchesQuery(facs[row], query, subject, slot)) { anyMatch = true; break; }
+        }
+      }
+      if (!anyMatch) continue;
+
+      html += '<tr>';
+      for (const slot of displaySlots) {
+        const facs = [...(sf.get(slot) || [])].sort();
+        const fac  = facs[row];
+        if (fac) {
+          html += `<td>${chip(fac, query)}</td>`;
+        } else {
+          html += `<td class="empty">·</td>`;
+        }
+      }
+      html += '</tr>';
+    }
+
+    html += `</tbody></table></div>`;
+
+    // If query but no visible rows survived filtering
+    if (query && !html.includes('<tr>')) {
+      area.innerHTML = html.replace(/<tbody>[\s\S]*<\/tbody>/, `<tbody></tbody></table></div>`) + noResults(query);
+      return;
+    }
+
+    area.innerHTML = html;
+  }
+
+  /* helpers */
+  function matchesQuery(faculty, query, subject, slot) {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    if (faculty.toLowerCase().includes(q)) return true;
+    if (slot && slot.toLowerCase().includes(q)) return true;
+    if (subject.code.toLowerCase().includes(q)) return true;
+    if (subject.full.toLowerCase().includes(q)) return true;
+    return false;
+  }
+
+  function chip(name, query) {
+    const hl = query && name.toLowerCase().includes(query.toLowerCase());
+    return `<span class="faculty-chip ${hl?'highlight':''}">${escHtml(name)}</span>`;
+  }
+
+  function noResults(query) {
+    return `<div class="empty-state">
+      <div class="emoji">🔍</div>
+      <p>No results for <strong>"${escHtml(query)}"</strong></p>
+    </div>`;
+  }
+
+  function escHtml(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  return { renderStats, renderTabs, renderMatrix };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PARSE LOG UI
+═══════════════════════════════════════════════════════════════════════════ */
+function renderParseLog(log) {
+  parseLog = log;
+  const wrap = document.getElementById('parse-log-wrap');
+  const el   = document.getElementById('parse-log');
+  if (!log.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  el.innerHTML = log.map(e =>
+    `<div class="log-${e.level}">[${e.level.toUpperCase()}] ${escHtml(e.msg)}</div>`
+  ).join('');
+}
+function toggleParseLog() {
+  document.getElementById('parse-log').classList.toggle('open');
+}
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ERROR TOAST
+═══════════════════════════════════════════════════════════════════════════ */
+function showError(msg, type='error') {
+  const el = document.getElementById('error-toast');
+  el.textContent = msg;
+  el.className   = type === 'warn' ? 'warn' : '';
+  el.style.display = 'block';
+  if (_errorTimer) clearTimeout(_errorTimer);
+  _errorTimer = setTimeout(() => { el.style.display = 'none'; }, 6000);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FILE HANDLING
+═══════════════════════════════════════════════════════════════════════════ */
+function handleFile(file) {
+  if (!file) return;
+
+  // Validate file type
+  const name = file.name.toLowerCase();
+  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+    showError('Please upload an .xlsx or .xls file.');
+    return;
+  }
+  // Sanity-check size (max 50 MB)
+  if (file.size > 50 * 1024 * 1024) {
+    showError('File is too large (max 50 MB).');
+    return;
+  }
+
+  showLoading();
+
+  const reader = new FileReader();
+  reader.onerror = () => { showError('Could not read the file. It may be corrupted.'); hideLoading(); };
+  reader.onload  = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const { subjects, log } = FileParser.parseWorkbook(wb);
+
+      if (!subjects.length) {
+        hideLoading();
+        document.getElementById('upload-section').style.display = 'flex';
+        document.getElementById('app-section').classList.remove('visible');
+        showError('No recognisable FFCS data found. Check the parser log below, or try a different file.');
+        // Show log in console at minimum
+        log.forEach(e => console[e.level === 'err' ? 'error' : 'warn']('[FFCS Parser]', e.msg));
+        return;
+      }
+
+      subjectsData  = subjects;
+      activeSubject = 0;
+      renderParseLog(log);
+      renderApp();
+    } catch (err) {
+      hideLoading();
+      document.getElementById('upload-section').style.display = 'flex';
+      document.getElementById('app-section').classList.remove('visible');
+      let msg = 'Failed to parse the workbook.';
+      if (err.message?.includes('CFB'))      msg = 'File appears corrupted or is not a valid Excel file.';
+      else if (err.message?.includes('sheet')) msg = 'Workbook has no sheets or is empty.';
+      else msg = `Parse error: ${err.message}`;
+      showError(msg);
+      console.error('[FFCS Parser]', err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showLoading() {
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('app-section').classList.add('visible');
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('main-content').style.display = 'none';
+}
+function hideLoading() {
+  document.getElementById('loading').style.display = 'none';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP RENDER / EVENTS
+═══════════════════════════════════════════════════════════════════════════ */
+function renderApp() {
+  hideLoading();
+  document.getElementById('header-actions').style.display = 'flex';
+  document.getElementById('main-content').style.display   = 'block';
+  Renderer.renderStats(subjectsData);
+  Renderer.renderTabs(subjectsData, activeSubject);
+  Renderer.renderMatrix(subjectsData[activeSubject], searchQuery);
+}
+
+function switchTab(i) {
+  activeSubject = i;
+  Renderer.renderTabs(subjectsData, activeSubject);
+  Renderer.renderMatrix(subjectsData[activeSubject], searchQuery);
+}
+
+function handleSearch(val) {
+  searchQuery = val.trim().toLowerCase();
+  document.getElementById('clear-btn').style.display = searchQuery ? 'inline-flex' : 'none';
+  Renderer.renderMatrix(subjectsData[activeSubject], searchQuery);
+}
+
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  handleSearch('');
+}
+
+function downloadWorkbook() {
+  ExcelExporter.download(subjectsData, 'ffcs_organized.xlsx');
+}
+
+function resetUpload() {
+  subjectsData  = [];
+  activeSubject = 0;
+  searchQuery   = '';
+  parseLog      = [];
+  document.getElementById('search-input').value       = '';
+  document.getElementById('header-actions').style.display = 'none';
+  document.getElementById('app-section').classList.remove('visible');
+  document.getElementById('app-section').style.display   = 'none';
+  document.getElementById('upload-section').style.display = 'flex';
+  document.getElementById('file-input').value = '';
+  setTimeout(() => document.getElementById('app-section').style.display = '', 10);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRAG & DROP
+═══════════════════════════════════════════════════════════════════════════ */
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KEYBOARD SHORTCUT: / focuses search
+═══════════════════════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    e.preventDefault();
+    document.getElementById('search-input')?.focus();
+  }
+  if (e.key === 'Escape') clearSearch();
+});
+</script>
+
+<footer>
+  Made by <strong>Haricharan Venkatesh</strong><span class="footer-sep">|</span>VIT Vellore
+</footer>
+
+</body>
+</html>
