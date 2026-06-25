@@ -554,13 +554,13 @@ let _errorTimer   = null;
    All slot logic is regex-based — no hardcoded lists.
 ═══════════════════════════════════════════════════════════════════════════ */
 const SlotUtils = (() => {
-  // Theory: one or two uppercase letters + digit(s), NOT starting with L
-  // Covers A1, A2, B1, TA1, TA2, etc.
-  const THEORY_RE = /^[A-HJ-Z][A-Z]?\d+$/;
+  // Theory: one, two, or three uppercase letters + digit(s), NOT starting with L
+  // Covers A1, A2, B1, TA1, TA2, TAA1, TCC1, TBB2, TDD2, etc.
+  const THEORY_RE = /^[A-HJ-Z][A-Z]{0,2}\d+$/;
   // Lab: L followed by digits (possibly with + separator)
   const LAB_RE    = /^L\d+(\+L\d+)*$/;
   // Raw slot token patterns
-  const TOKEN_THEORY = /\b([A-HJ-Z][A-Z]?\d+)\b/g;
+  const TOKEN_THEORY = /\b([A-HJ-Z][A-Z]{0,2}\d+)\b/g;
   const TOKEN_LAB    = /L(\d+)/g;
   // Nil-like values to skip
   const NIL_RE = /^(nil|nan|n\/a|none|-|–|—|null|undefined|free)$/i;
@@ -573,7 +573,8 @@ const SlotUtils = (() => {
   function theorySortKey(s) {
     const m = s.match(/^([A-Z]+)(\d+)$/);
     if (!m) return 9999;
-    return m[1].charCodeAt(0) * 100 + parseInt(m[2]);
+    const prefixKey = m[1].split('').reduce((acc, c, i) => acc + c.charCodeAt(0) * Math.pow(1000, m[1].length - 1 - i), 0);
+    return prefixKey + parseInt(m[2]);
   }
 
   /** Sort key for lab slots */
